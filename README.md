@@ -1,4 +1,4 @@
-# try_nmatrix
-try to use nmatrix to build neural network
-# get started
+# Theme
+try to use nmatrix to build neural network from scratch
+# Get Started
 gem install nmatrix
