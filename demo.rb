@@ -1,4 +1,5 @@
 require 'nmatrix/nmatrix'
+require_relative 'layers'
 
 module NnFunctions
   def sigmoid(x)
@@ -10,7 +11,7 @@ module NnFunctions
     x2.exp / x2.exp.sum(1)[0]
   end
 
-  def argmax(x)  # built-in NMatrix
+  def argmax(x)
     list = x.shape[0] == 1 ? [x.to_a] : x.to_a
     res = list.map do |row|
       max = -Float::MAX
@@ -26,6 +27,23 @@ module NnFunctions
     N[*res]
   end
   ##############################################
+  class NMatrix  # monkey-patch
+    def argmax(dimen=0)
+      new_shape = shape.dup
+      new_shape[dimen] = 1
+      ret = NMatrix.zeros(new_shape)
+      each_rank(dimen) do |sub_mat|
+
+      end
+    end
+  end
+
+  def test
+    a = NMatrix.new([2, 2, 2], [1, 3, 5, 7, 2, 4, 6, 8])
+    # a.argmax(2) => [[1, 1], [1, 1]]
+  end
+  ##############################################
+
   def step_function(x)  # NMatrix
     (x>0).cast(:list, :int32)
   end
@@ -144,7 +162,6 @@ class SimpleNet
   end
 end
 
-
 class TwoLayerNet
   attr_reader :params
   def initialize(in_dim, hid_dim, out_dim, std=0.01)
@@ -153,28 +170,29 @@ class TwoLayerNet
     @params['b1'] = NMatrix.new([1, hid_dim], 0.0)
     @params['W2'] = NMatrix.random([hid_dim, out_dim]) * std
     @params['b2'] = NMatrix.new([1, out_dim], 0.0)
+
+    @layers = Hash.new  # ruby hash is ordered by insertion order by default
+    @layers['Affine1'] = Affine.new(@params['W1'], @params['b1'])
+    @layers['Relu1'] = Relu.new()
+    @layers['Affine2'] = Affine.new(@params['W2'], @params['b2'])
+    @lastLayers = SoftmaxWithLoss.new()
   end
 
   def predict(x)
-    w1, w2 = @params['W1'], @params['W2']
-    b1, b2 = @params['b1'], @params['b2']
-    a1 = x.dot(w1) + b1.repeat(x.shape[0], 0)  # batch
-    z1 = sigmoid(a1)
-    a2 = z1.dot(w2)+b2.repeat(x.shape[0], 0)
-    y = softmax(a2)
-    return y
+    @layers.each {|k, layer| x = layer.forward(x)}
+    return x
   end
 
   def loss(x, t)
     y = predict(x)
-    return cross_entropy_error(y, t)
+    return @lastLayers.forward(y, t)
   end
 
-  def accuracy(x, t)
+  def accuracy(x, t)  # batch-case?
     y = predict(x)
     y = argmax(y)
-    t = argmax(t)
-    # accuracy = (y==t)
+    t = argmax(t) if t.dim != 1
+    # accuracy = (y==t) # python
     total = y.shape[0]
     accurate = 0.0
     total.times do |idx|
